@@ -1,24 +1,38 @@
 use std::{env, fs};
 
-use regex::Regex;
+use colored::Colorize;
 
-use crate::domain::structs::FileResult;
+use crate::domain::structs::{Config, Line};
 
 pub fn execute() {
     let args: Vec<String> = env::args().collect();
 
-    let (query, filename) = parse_config(&args);
-    let lines = get_file_lines(filename);
-    let result_list = get_results(&lines, query);
+    let config_result = Config::new(&args);
 
-    report_results(&result_list);
-}
+    match config_result {
+        Ok(config) => {
+            let query = &config.query;
+            let filename = &config.filename;
+            let show_all = config.show_all;
 
-fn parse_config(args: &[String]) -> (&str, &str) {
-    let query = &args.get(1).expect("Search pattern must be provided.");
-    let filename = &args.get(2).expect("File to be searched must be provided.");
+            let lines = get_file_lines(&filename);
+            let highlighted_lines: Vec<Line> = lines
+                .iter()
+                .enumerate()
+                .map::<Line, _>(|(number, content)| Line {
+                    number,
+                    content: String::from(content),
+                })
+                .filter(|line| show_all || line.content.contains(query))
+                .map(|line| highlight_matches(line, query))
+                .collect();
 
-    (query, filename)
+            for line in highlighted_lines {
+                println!("{}", line.generate_report())
+            }
+        }
+        Err(msg) => panic!("{}", msg),
+    }
 }
 
 fn get_file_lines(filename: &str) -> Vec<String> {
@@ -27,40 +41,13 @@ fn get_file_lines(filename: &str) -> Vec<String> {
     contents.split("\n").map(|x| String::from(x)).collect()
 }
 
-fn find_word_in_text<'a, 'b>(search: &'a Regex, target: &'b String) -> Vec<String> {
-    search
-        .captures_iter(target)
-        .map(|x| String::from(&x[0]))
-        .collect()
-}
+fn highlight_matches(line: Line, query: &str) -> Line {
+    let content = line
+        .content
+        .replace(query, &query.green().bold().to_string());
 
-fn get_results(lines: &[String], query: &str) -> Vec<FileResult> {
-    let regex = Regex::new(query).unwrap();
-
-    lines
-        .iter()
-        .enumerate()
-        .map::<Vec<FileResult>, _>(|(index, line)| {
-            let result_list = find_word_in_text(&regex, line);
-
-            result_list
-                .iter()
-                .map(|result| FileResult {
-                    line: index + 1,
-                    word: String::from(result),
-                })
-                .collect()
-        })
-        .flatten()
-        .collect()
-}
-
-fn report_results(result_list: &[FileResult]) -> () {
-    let result: &str = &result_list
-        .iter()
-        .map(|dto| dto.line.to_string())
-        .reduce(|acc, item| format!("{}, {}", acc, item))
-        .unwrap();
-
-    println!("Searched text present in lines: {}", result);
+    Line {
+        content,
+        number: line.number,
+    }
 }
