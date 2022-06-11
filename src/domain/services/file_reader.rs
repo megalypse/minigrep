@@ -11,21 +11,10 @@ pub fn execute() {
 
     match config_result {
         Ok(config) => {
-            let query = &config.query;
             let filename = &config.filename;
-            let show_all = config.show_all;
 
             let lines = get_file_lines(&filename);
-            let highlighted_lines: Vec<Line> = lines
-                .iter()
-                .enumerate()
-                .map::<Line, _>(|(number, content)| Line {
-                    number,
-                    content: String::from(content),
-                })
-                .filter(|line| show_all || line.content.contains(query))
-                .map(|line| highlight_matches(line, query))
-                .collect();
+            let highlighted_lines: Vec<Line> = process_lines(lines, config);
 
             for line in highlighted_lines {
                 println!("{}", line.generate_report())
@@ -33,6 +22,22 @@ pub fn execute() {
         }
         Err(msg) => panic!("{}", msg),
     }
+}
+
+fn process_lines(lines: Vec<String>, config: Config) -> Vec<Line> {
+    let show_all = config.show_all;
+    let query = &config.query;
+
+    lines
+        .iter()
+        .enumerate()
+        .map::<Line, _>(|(number, content)| Line {
+            number,
+            content: String::from(content),
+        })
+        .filter(|line| show_all || line.content.contains(query))
+        .map(|line| highlight_matches(line, query))
+        .collect()
 }
 
 fn get_file_lines(filename: &str) -> Vec<String> {
